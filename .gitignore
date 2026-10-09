@@ -1,0 +1,24 @@
+# Rust
+/target
+**/target
+Cargo.lock
+
+# Frontend / Tauri
+node_modules/
+dist/
+build/
+.vite/
+.tauri/
+src-tauri/target/
+
+# Local configuration and output
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+Thumbs.db
+*.tmp
+*.bak
+test-output/
+artifacts/

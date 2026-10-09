@@ -1,0 +1,14 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/core",
+    "crates/hardware",
+    "crates/compatibility",
+    "crates/opencore",
+    "crates/usb",
+    "crates/macos-media",
+    "crates/integrations",
+    "crates/platform",
+    "crates/validation",
+]
+# Add apps/desktop after generating the Tauri scaffold.
