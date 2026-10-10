@@ -1,6 +1,8 @@
 # Hackintosh Studio
 
-A planned cross-platform desktop workbench for Hackintosh preparation on Windows and Linux, built with Rust, Tauri 2, React, TypeScript, and Tailwind CSS.
+A planned on-demand assistant for preparing Hackintosh EFI on Windows and Linux, built with Rust, Tauri 2, React, TypeScript, and Tailwind CSS. It runs directly from a portable executable or an installed app package; it is not a long-running management suite or background service.
+
+The executable may be temporary, but user-created project data is persistent: EFI releases, SMBIOS metadata, and optional backups remain in the chosen project folder until the user removes them.
 
 > Status: planning/scaffolding. The features below are goals, not implemented functionality.
 
@@ -18,17 +20,20 @@ See [Rust Reimplementation Strategy](docs/RUST_REIMPLEMENTATION.md) for the comp
 
 ## Goals
 - Inspect host hardware and report unknowns honestly (native Rust implementation).
-- Manage versioned OpenCore resources and generate an EFI workspace (native Rust implementation).
-- Validate configuration files and resource consistency (native Rust implementation).
-- Integrate supported USB-mapping workflows (native Rust implementation).
-- Download/import macOS resources from documented, permitted sources.
-- Prepare media only after explicit target-device confirmation.
+- Recommend a macOS version compatible with the detected hardware; offer an OCLP path with explicit risk notice where applicable.
+- Resolve and download the OpenCore resources needed for EFI generation after showing a versioned manifest and getting user confirmation.
+- Generate, validate, review, and export a complete EFI in native Rust.
+- Require an internet connection at every launch for update checks and compatibility data access; block all use while offline.
+- Label application and data updates as mandatory or optional. Mandatory updates block use; skipped optional updates are shown again at the next launch until installed.
 
 ## Non-goals
 - Guarantee macOS compatibility with every PC.
 - Replace OpenCore's bootloader.
 - Silently modify or format disks.
 - Promise that every macOS version is available as a ready-made ISO.
+- Download macOS installers or Recovery images in the first release.
+- Map USB ports or write bootable media in the first release.
+- Install a background service or keep the helper running after the task ends.
 - Depend permanently on external Python scripts or executables for core functionality.
 
 ## Planned stack
@@ -57,13 +62,15 @@ hackintosh-studio/
 ```
 
 ## MVP
-1. App shell builds on Windows and Linux.
-2. Project creation and hardware report export (native Rust hardware detection).
-3. Versioned OpenCore resource selection.
-4. EFI workspace generation and configuration validation (native Rust).
-5. Compatibility findings with sources (native Rust compatibility engine).
-6. A documented Recovery-resource workflow, subject to source/platform constraints.
-7. EFI export to a folder or ZIP without physical disk writes.
+1. Run on demand as a portable executable or installed app package, with Linux hardware discovery first and platform boundaries ready for Windows support.
+2. Scan hardware or import a compatible JSON report; retain unknown and unsupported devices explicitly.
+3. Recommend the highest stable macOS version compatible with the included hardware, and a separate OCLP alternative with a risk acknowledgment.
+4. Show and confirm a manifest for compatible OpenCore, kext, driver, and other EFI resources before downloading.
+5. Generate and validate a complete EFI natively in Rust; ACPI-dependent builds require ACPI tables.
+6. Save output under `Releases/{macOS}-macos/EFI`, with confirmation and optional backup before replacing an existing EFI.
+7. Keep a project-level SMBIOS JSON profile; compare its hardware fingerprint on later builds and let the user reuse existing values or generate new ones, with optional timestamped backup.
+8. Do not download macOS installers/Recovery images, map USB ports, or write bootable media in the first release.
+9. Require internet access on every launch, even when no update is available, because hardware compatibility checks use online API data. Check application and data updates at launch; mandatory updates block use, while skipped optional updates are shown again next time. Update an installed app package in place; for a portable build, provide the new package from the official product site.
 
 ## Documentation
 - [Architecture](docs/ARCHITECTURE.md)
