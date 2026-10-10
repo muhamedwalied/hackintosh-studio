@@ -79,6 +79,98 @@ impl LinuxDetector {
         Ok(cpus)
     }
 
+    /// Enumerate PCI devices from /sys/bus/pci/devices.
+    /// This is the primary PCI enumeration method - no external commands required.
+    fn enumerate_pci_devices(&self) -> Vec<PciDevice> {
+        let mut devices = Vec::new();
+        let pci_dir = self.sys_root.join("bus/pci/devices");
+        if let Ok(entries) = fs::read_dir(&pci_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                let bdf = entry.file_name().to_string_lossy().to_string();
+                if let Some(dev) = self.parse_pci_device_sysfs(&bdf, &path) {
+                    devices.push(dev);
+                }
+            }
+        }
+        devices
+    }
+
+    /// Parse a single PCI device from sysfs.
+    fn parse_pci_device_sysfs(&self, bdf: &str, path: &Path) -> Option<PciDevice> {
+        let vendor_id = self
+            .read_file_opt(&path.join("vendor"))
+            .map(|s| s.trim_start_matches("0x").to_uppercase())
+            .map(HardwareField::detected);
+        let device_id = self
+            .read_file_opt(&path.join("device"))
+            .map(|s| s.trim_start_matches("0x").to_uppercase())
+            .map(HardwareField::detected);
+        let class = self
+            .read_file_opt(&path.join("class"))
+            .map(|s| s.trim_start_matches("0x").to_uppercase());
+        let _revision = self
+            .read_file_opt(&path.join("revision"))
+            .map(|s| s.trim_start_matches("0x").to_uppercase())
+            .map(HardwareField::detected);
+        let subsystem_vendor = self
+            .read_file_opt(&path.join("subsystem_vendor"))
+            .map(|s| s.trim_start_matches("0x").to_uppercase())
+            .map(HardwareField::detected);
+        let subsystem_device = self
+            .read_file_opt(&path.join("subsystem_device"))
+            .map(|s| s.trim_start_matches("0x").to_uppercase())
+            .map(HardwareField::detected);
+
+        // Read driver symlink target basename
+        let driver = fs::read_link(path.join("driver"))
+            .ok()
+            .and_then(|p| p.file_name().map(|n| n.to_string_lossy().to_string()))
+            .map(HardwareField::detected)
+            .unwrap_or_else(|| HardwareField::unavailable("no driver bound"));
+
+        // Class code parsing: class file contains 6 hex digits (class<<16 | subclass<<8 | prog_if)
+        let (class_code, subclass_code, prog_if) = class
+            .as_ref()
+            .and_then(|c| {
+                let val = u32::from_str_radix(c, 16).ok()?;
+                Some((
+                    Some(format!("{:02X}", (val >> 16) & 0xFF)),
+                    Some(format!("{:02X}", (val >> 8) & 0xFF)),
+                    Some(format!("{:02X}", val & 0xFF)),
+                ))
+            })
+            .unwrap_or((None, None, None));
+
+        // Look up vendor/device names from pci.ids if available (optional enhancement)
+        let vendor_name = HardwareField::unavailable("pci.ids lookup not implemented");
+        let device_name = HardwareField::unavailable("pci.ids lookup not implemented");
+
+        Some(PciDevice {
+            address: HardwareField::detected(bdf.to_string()),
+            vendor_id: vendor_id
+                .unwrap_or_else(|| HardwareField::unavailable("vendor not readable")),
+            device_id: device_id
+                .unwrap_or_else(|| HardwareField::unavailable("device not readable")),
+            class_code: class_code
+                .map(HardwareField::detected)
+                .unwrap_or_else(|| HardwareField::unavailable("class not readable")),
+            subclass_code: subclass_code
+                .map(HardwareField::detected)
+                .unwrap_or_else(|| HardwareField::unavailable("subclass not readable")),
+            prog_if: prog_if
+                .map(HardwareField::detected)
+                .unwrap_or_else(|| HardwareField::unavailable("prog_if not readable")),
+            vendor_name,
+            device_name,
+            driver,
+            subsystem_vendor_id: subsystem_vendor
+                .unwrap_or_else(|| HardwareField::unavailable("subsystem_vendor not readable")),
+            subsystem_device_id: subsystem_device
+                .unwrap_or_else(|| HardwareField::unavailable("subsystem_device not readable")),
+        })
+    }
+
     /// Get CPU vendor from cpuinfo.
     fn cpu_vendor(&self, cpuinfo: &[HashMap<String, String>]) -> HardwareField<String> {
         cpuinfo
@@ -131,21 +223,27 @@ impl LinuxDetector {
     }
 
     /// Get CPU cores/threads.
+    /// Counts unique (physical_package_id, core_id) pairs for physical cores.
     fn cpu_cores_threads(
         &self,
         cpuinfo: &[HashMap<String, String>],
     ) -> (HardwareField<u32>, HardwareField<u32>) {
-        let physical_cores = cpuinfo
+        // Use (physical package id, core id) pairs for accurate physical core count
+        let physical_pairs: std::collections::HashSet<_> = cpuinfo
             .iter()
-            .filter_map(|c| c.get("core id"))
-            .collect::<std::collections::HashSet<_>>()
-            .len() as u32;
+            .filter_map(|c| {
+                let pkg = c.get("physical id")?;
+                let core = c.get("core id")?;
+                Some((pkg.clone(), core.clone()))
+            })
+            .collect();
+        let physical_cores = physical_pairs.len() as u32;
         let logical_threads = cpuinfo.len() as u32;
 
         let physical = if physical_cores > 0 {
             HardwareField::detected(physical_cores)
         } else {
-            HardwareField::unavailable("no core id in /proc/cpuinfo")
+            HardwareField::unavailable("no physical id/core id in /proc/cpuinfo")
         };
         let logical = if logical_threads > 0 {
             HardwareField::detected(logical_threads)
@@ -156,25 +254,20 @@ impl LinuxDetector {
     }
 
     /// Get CPU frequencies.
-    fn cpu_frequencies(&self) -> (HardwareField<u32>, HardwareField<u32>) {
-        let base = self
-            .read_file_opt(
-                &self
-                    .sys_root
-                    .join("devices/system/cpu/cpu0/cpufreq/cpuinfo_min_freq"),
-            )
-            .and_then(|s| s.parse().ok())
-            .map(|khz: u32| HardwareField::detected(khz / 1000))
-            .unwrap_or_else(|| HardwareField::unavailable("cpufreq not accessible"));
-        let max = self
-            .read_file_opt(
-                &self
-                    .sys_root
-                    .join("devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq"),
-            )
-            .and_then(|s| s.parse().ok())
-            .map(|khz: u32| HardwareField::detected(khz / 1000))
-            .unwrap_or_else(|| HardwareField::unavailable("cpufreq not accessible"));
+    /// Only use authoritative base/turbo attributes when exposed by kernel.
+    /// Do not mislabel cpuinfo_min_freq as base or cpuinfo_max_freq as turbo.
+    /// cpu MHz in /proc/cpuinfo is current frequency; scaling_max_freq is a policy ceiling.
+    /// Neither matches base/turbo semantics exactly, so leave unavailable with notes.
+    fn cpu_frequencies(
+        &self,
+        _cpuinfo: &[HashMap<String, String>],
+    ) -> (HardwareField<u32>, HardwareField<u32>) {
+        let base = HardwareField::unavailable(
+            "base frequency not exposed by kernel (cpu MHz in /proc/cpuinfo is current, not base; no authoritative base interface)",
+        );
+        let max = HardwareField::unavailable(
+            "max turbo frequency not exposed by kernel (scaling_max_freq is a cpufreq policy ceiling, not proven max turbo)",
+        );
         (base, max)
     }
 
@@ -321,55 +414,6 @@ impl LinuxDetector {
             .unwrap_or_else(|| HardwareField::unavailable(format!("DMI {} not readable", path)))
     }
 
-    /// Parse lspci output for PCI devices (fallback if sysfs insufficient).
-    fn parse_lspci(&self) -> Vec<PciDevice> {
-        // Try to run lspci -nnmm if available
-        let output = std::process::Command::new("lspci").args(["-nnmm"]).output();
-        let mut devices = Vec::new();
-
-        if let Ok(out) = output {
-            if out.status.success() {
-                let stdout = String::from_utf8_lossy(&out.stdout);
-                for line in stdout.lines() {
-                    if let Some(dev) = Self::parse_lspci_line(line) {
-                        devices.push(dev);
-                    }
-                }
-            }
-        }
-        devices
-    }
-
-    fn parse_lspci_line(line: &str) -> Option<PciDevice> {
-        // Format: "00:00.0 \"Host bridge\" \"Intel Corporation\" \"12th Gen Core Processor Host Bridge/DRAM Registers\" \"8086\" \"4670\""
-        let parts: Vec<&str> = line.split('"').collect();
-        if parts.len() >= 6 {
-            let addr = parts[0].trim();
-            let _class = parts[1];
-            let vendor_name = parts[3];
-            let device_name = parts[5];
-            let ids: Vec<&str> = parts[0].split_whitespace().collect();
-            let vendor_id = ids.get(2).unwrap_or(&"");
-            let device_id = ids.get(3).unwrap_or(&"");
-
-            Some(PciDevice {
-                address: HardwareField::detected(addr.to_string()),
-                vendor_id: HardwareField::detected(vendor_id.to_string()),
-                device_id: HardwareField::detected(device_id.to_string()),
-                class_code: HardwareField::unavailable("not parsed"),
-                subclass_code: HardwareField::unavailable("not parsed"),
-                prog_if: HardwareField::unavailable("not parsed"),
-                vendor_name: HardwareField::detected(vendor_name.to_string()),
-                device_name: HardwareField::detected(device_name.to_string()),
-                driver: HardwareField::unavailable("not detected"),
-                subsystem_vendor_id: HardwareField::unavailable("not parsed"),
-                subsystem_device_id: HardwareField::unavailable("not parsed"),
-            })
-        } else {
-            None
-        }
-    }
-
     /// Get GPU devices from PCI.
     fn get_gpus(&self, pci_devices: &[PciDevice]) -> Vec<GpuInfo> {
         pci_devices.iter()
@@ -431,10 +475,12 @@ impl LinuxDetector {
                     .map(HardwareField::detected)
                     .unwrap_or_else(|| HardwareField::unavailable("MAC not readable"));
 
-                let driver = self
-                    .read_file_opt(&path.join("device/driver/module/srcversion"))
+                // Read driver symlink target basename (e.g., "e1000e", "iwlwifi")
+                let driver = fs::read_link(path.join("device/driver"))
+                    .ok()
+                    .and_then(|p| p.file_name().map(|n| n.to_string_lossy().to_string()))
                     .map(HardwareField::detected)
-                    .unwrap_or_else(|| HardwareField::unavailable("driver not readable"));
+                    .unwrap_or_else(|| HardwareField::unavailable("no driver bound"));
 
                 let operstate = self
                     .read_file_opt(&path.join("operstate"))
@@ -768,7 +814,7 @@ impl crate::HardwareDetector for LinuxDetector {
         let (physical, logical) = self.cpu_cores_threads(&cpuinfo);
         report.cpu.physical_cores = physical;
         report.cpu.logical_threads = logical;
-        let (base_freq, max_freq) = self.cpu_frequencies();
+        let (base_freq, max_freq) = self.cpu_frequencies(&cpuinfo);
         report.cpu.base_frequency_mhz = base_freq;
         report.cpu.max_turbo_frequency_mhz = max_freq;
         report.cpu.codename =
@@ -801,14 +847,14 @@ impl crate::HardwareDetector for LinuxDetector {
         report.motherboard.form_factor = self.read_dmi("chassis_type");
         report.motherboard.uuid = self.read_dmi("product_uuid");
 
-        // PCI devices (using lspci as primary source)
-        let pci_devices = self.parse_lspci();
+        // PCI devices (native sysfs enumeration)
+        let pci_devices = self.enumerate_pci_devices();
         report.pci_devices = pci_devices.clone();
 
-        // GPUs from PCI
+        // GPUs from PCI (filtered by class code 0x03xx)
         report.gpus = self.get_gpus(&pci_devices);
 
-        // Audio from PCI
+        // Audio from PCI (filtered by class code 0x0403)
         report.audio = self.get_audio(&pci_devices);
 
         // Network interfaces
