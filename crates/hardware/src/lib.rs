@@ -75,4 +75,5 @@ pub fn create_detector() -> Box<dyn HardwareDetector> {
 }
 
 pub mod error;
+pub mod opcore_import;
 pub mod platform;
