@@ -536,7 +536,7 @@ pub fn import_opcore_report<P: AsRef<Path>>(path: P) -> Result<ImportResult, Har
                     );
                 }
             }
-            if let Some(subsys) = net.subsystem_id {
+            if let Some(_subsys) = net.subsystem_id {
                 // Subsystem ID does not map to subclass_code - track as unmapped
                 unmapped.push(format!("Network '{}': Subsystem ID - no semantic equivalent in native PciIds.subclass_code", key));
             }
@@ -585,7 +585,7 @@ pub fn import_opcore_report<P: AsRef<Path>>(path: P) -> Result<ImportResult, Har
                     );
                 }
             }
-            if let Some(subsys) = ctrl.subsystem_id {
+            if let Some(_subsys) = ctrl.subsystem_id {
                 unmapped.push(format!(
                     "USB Controller '{}': Subsystem ID - no semantic equivalent in native model",
                     key
@@ -636,7 +636,7 @@ pub fn import_opcore_report<P: AsRef<Path>>(path: P) -> Result<ImportResult, Har
                     );
                 }
             }
-            if let Some(subsys) = snd.subsystem_id {
+            if let Some(_subsys) = snd.subsystem_id {
                 unmapped.push(format!(
                     "Sound '{}': Subsystem ID - no semantic equivalent in native model",
                     key
@@ -686,7 +686,7 @@ pub fn import_opcore_report<P: AsRef<Path>>(path: P) -> Result<ImportResult, Har
                         pci_dev.vendor_id = HardwareField::detected(vendor);
                         pci_dev.device_id = HardwareField::detected(device);
 
-                        if let Some(subsys) = subsystem_id.as_ref() {
+                        if let Some(_subsys) = subsystem_id.as_ref() {
                             pci_dev.subsystem_vendor_id =
                                 HardwareField::unavailable("OpCore Subsystem ID not splittable");
                             pci_dev.subsystem_device_id =
