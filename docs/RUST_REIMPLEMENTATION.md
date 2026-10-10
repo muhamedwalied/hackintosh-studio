@@ -43,7 +43,8 @@ This document describes the migration strategy for replacing external tool depen
 - GPU codename recognition via device ID
 - Input device connection type detection (I2C, PS2, SMBus, USB)
 - ACPI table dumping
-- JSON report export
+- Native versioned JSON report export/import
+- Import a supported subset of OpCore-Simplify `Report.json`, retaining warnings for unmapped fields; reverse export to OpCore-Simplify format is not implemented
 
 **Dependencies**: WMIC (Windows), pci.ids, usb.ids, cpuid.py
 
@@ -88,7 +89,9 @@ This document describes the migration strategy for replacing external tool depen
 - [ ] Input device detection with connection type
 - [ ] Monitor detection
 - [ ] ACPI table enumeration and dumping
-- [ ] JSON report export (compatible with OpCore-Simplify format)
+- [x] Native versioned JSON report export/import
+- [x] OpCore-Simplify `Report.json` import adapter for the mapped subset
+- [ ] OpCore-Simplify-compatible report export (not implemented; requires an explicit reverse mapping)
 - [ ] Platform abstraction (Windows WMI, Linux sysfs/proc, future macOS IOKit)
 
 **License Considerations**: BSD-3-Clause (permissive). Can reimplement algorithms. Must preserve copyright notices if adapting code.
@@ -207,7 +210,7 @@ This document describes the migration strategy for replacing external tool depen
 |--------------|---------------|--------|------------|----------|-------|
 | Hardware Detection | Hardware Sniffer | 🔴 Not Started | `hardware` | P0 | Foundation for all else |
 | ACPI Dump | Hardware Sniffer | 🔴 Not Started | `hardware` | P0 | Needed for custom patches |
-| Hardware Report Export | Hardware Sniffer | 🔴 Not Started | `hardware` | P0 | JSON compatibility |
+| Native Hardware Report JSON | Hardware Sniffer | 🟡 Partial | `core`, `hardware` | P0 | Native format implemented; OpCore-Simplify import is subset-only; reverse export is not implemented |
 | SSDT Generation | SSDTTime | 🔴 Not Started | `opencore/acpi` | P1 | Deterministic, testable |
 | DSDT Dump | SSDTTime | 🔴 Not Started | `platform` | P1 | Platform-specific |
 | Compatibility Check | OpCore-Simplify | 🔴 Not Started | `compatibility` | P1 | Core decision engine |
@@ -301,7 +304,7 @@ Before marking a feature "native implemented":
 3. Implement Windows backend using `wmi` crate in `platform`
 4. Implement Linux backend using `sysfs`/`proc` in `platform`
 5. Add ACPI table enumeration
-6. JSON serialization compatible with OpCore-Simplify format
+6. Native JSON report serialization plus subset import from OpCore-Simplify `Report.json`; do not claim reverse-format compatibility without a validated exporter
 7. Tauri command for hardware scan
 8. Fixture tests with sample reports
 

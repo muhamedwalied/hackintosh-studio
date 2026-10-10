@@ -30,7 +30,7 @@ The UI must not own compatibility logic or perform privileged operations directl
 Shared identifiers, project manifest, workflow state, typed errors, operation progress, and serialization contracts. Avoid OS-specific APIs.
 
 ### `hardware`
-**Native Rust implementation** of host hardware discovery. Collect hardware information from platform APIs (Windows WMI, Linux sysfs/proc). Track source and confidence for each field. Distinguish detected, unavailable, and unknown values. Export JSON reports compatible with OpCore-Simplify format. ACPI table enumeration and dumping.
+**Native Rust implementation** of host hardware discovery. Collect hardware information from platform APIs (Windows WMI, Linux sysfs/proc). Track source and confidence for each field. Distinguish detected, unavailable, and unknown values. Store/export the native versioned JSON report format. Import OpCore-Simplify `Report.json` through a separate subset adapter that reports unmapped data; do not claim reverse export compatibility. ACPI table enumeration and dumping.
 
 ### `compatibility`
 **Native Rust implementation** of versioned compatibility rules. Evaluate rules against a hardware report and target macOS release. Every rule includes source, review date, applicability, and confidence. Results: `supported`, `limited`, `unsupported`, or `unknown`. Kext selection, SMBIOS selection, ACPI patch selection logic.

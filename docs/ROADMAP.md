@@ -1,6 +1,6 @@
 # Roadmap
 
-All items are unstarted at project initialization.
+Phase 1 implementation is underway. The native Linux scanner, ACPI table access, native report JSON I/O, and a subset OpCore-Simplify report importer are committed. Windows discovery, UI wiring, broader report parity, and hardware fixture validation remain open.
 
 ## Phase 0 — Foundation
 - [ ] Create Cargo workspace and Tauri desktop shell.
@@ -14,10 +14,11 @@ Exit: application builds on both target OSes and opens an empty project.
 ## Phase 1 — Project and Hardware Report (Native Rust)
 - [ ] Define versioned `ProjectManifest`.
 - [ ] Implement **native Rust** Windows hardware discovery (WMI-based).
-- [ ] Implement **native Rust** Linux hardware discovery (sysfs/proc-based).
-- [ ] Implement ACPI table enumeration and dumping.
-- [ ] Represent unknown/unavailable values explicitly.
-- [ ] Display and export hardware reports (JSON compatible with OpCore-Simplify).
+- [x] Implement **native Rust** Linux hardware discovery (sysfs/proc-based).
+- [x] Implement ACPI table enumeration and dumping.
+- [x] Represent unknown/unavailable values explicitly.
+- [x] Export/import the native hardware-report JSON format; import the supported subset of OpCore-Simplify `Report.json` with unmapped-field warnings. Reverse export to OpCore-Simplify format is not implemented.
+- [ ] Display hardware reports in the UI and validate broader report compatibility.
 - [ ] Add fixture tests for partial discovery.
 
 Exit: report is useful without inventing missing values; no Python dependency for hardware detection.

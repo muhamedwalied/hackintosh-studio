@@ -46,12 +46,14 @@ https://github.com/lzhoang2801/Hardware-Sniffer
 
 **License**: BSD-3-Clause
 
-Planned: native Rust hardware discovery for Windows (WMI) and Linux (sysfs/proc). ACPI table dumping. JSON report export compatible with OpCore-Simplify format.
+Implemented for Phase 1: native Linux hardware discovery through sysfs/proc and ACPI table enumeration/dumping. Windows discovery remains a placeholder. The hardware crate exports its native JSON report format and imports a supported subset of OpCore-Simplify `Report.json`; it does not export OpCore-Simplify-compatible reports. The importer returns warnings and unmapped fields for source data the native model cannot represent.
 
 **Migration Status**: `adapter` (temporary) → `native` (Phase 1)
 - Hardware collection → Phase 1 (native in `hardware` crate)
 - ACPI dumping → Phase 1 (native in `hardware` crate)
-- Report export → Phase 1 (native in `hardware` crate)
+- Native report JSON export/import → Phase 1 (native in `core` crate)
+- OpCore-Simplify report import (mapped subset only) → Phase 1 (`hardware::opcore_import`)
+- OpCore-Simplify-compatible report export → not implemented; requires a separate mapping review
 
 **Adapter**: `integrations::hardware_sniffer` (feature `adapter-hardware-sniffer`)
 - Invokes `Hardware-Sniffer-CLI.py` as subprocess
